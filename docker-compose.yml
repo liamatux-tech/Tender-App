@@ -1,6 +1,12 @@
 services:
   tender-app:
     build: .
-    ports:
-      - "5000:5000"
     restart: unless-stopped
+    expose:
+      - "5000"
+    networks:
+      - edge
+
+networks:
+  edge:
+    external: true
