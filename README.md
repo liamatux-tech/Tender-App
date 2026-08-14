@@ -8,24 +8,27 @@ A small Flask web app that fetches tender information from a tender portal by ev
 - Simple single-page web UI
 
 ## Requirements
-- Python 3.9+
-- See `requirements.txt` for dependencies
+- Docker & Docker Compose
 
-## Setup
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Run
+## Run locally
 
 ```bash
-python3 tender_app.py
+docker compose up -d --build
 ```
 
-The app starts on `http://0.0.0.0:5000`.
+The app starts on `http://localhost:5000`.
 
 ## Deployment
-Running as a systemd service on Ubuntu Server (`tender-app.service`), auto-restarts on failure and starts on boot.
+
+- Runs as a Docker container on Ubuntu Server via `docker-compose.yml` (`restart: unless-stopped` — survives reboots and crashes)
+- Publicly exposed via **Cloudflare Tunnel** at [tender.liamatux.com](https://tender.liamatux.com) — no port forwarding needed, tunnel connects outbound to Cloudflare and routes to `localhost:5000`
+- Cloudflare Tunnel runs as its own systemd service (`cloudflared`)
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) builds the Docker image on every push/PR to catch build errors before deployment.
+
+## Project structure
+- `tender_app.py` — main application
+- `Dockerfile` / `docker-compose.yml` — containerization
+- `requirements.txt` — Python dependencies
