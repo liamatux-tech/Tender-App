@@ -16,30 +16,43 @@ A small Flask web app that fetches tender information from a tender portal by ev
 docker compose up -d --build
 ```
 
-The app starts on `http://localhost:5000` (internal, exposed only inside the `edge` Docker network).
+The app starts on `http://localhost:5000` (internal only, exposed via the shared `edge` Docker network — not published to the host directly).
 
 ## Deployment
 
-- Runs as an independent Docker Compose project on Hetzner, connected to a shared external network `edge`
-- Reverse proxy handled by a separate `nginx-proxy` project (also on `edge`), terminating SSL with a Cloudflare Origin Certificate for the `liamatux.com` zone
-- Publicly available at [tender.liamatux.com](https://tender.liamatux.com)
-- **CI**: GitHub Actions (`.github/workflows/ci.yml`) builds the Docker image on every push/PR
-- **CD**: GitHub Actions (`.github/workflows/deploy.yml`) auto-deploys to the server via SSH on every push to `main` — `git pull` + `docker compose up -d --build`, no manual steps required
+Runs as an independent Docker Compose project on a Hetzner VPS, alongside two other independent projects (`nginx-proxy` and `portflix-deploy`), connected only through a shared external Docker network called `edge`. Nothing is nested — each project lives in its own folder with its own docker-compose.yml.
 
-## Architecture
+- **nginx-proxy** — separate project, terminates SSL with a Cloudflare Origin Certificate (wildcard for `*.liamatux.com`), routes by domain to the right container by service name
+- **Public URL**: [tender.liamatux.com](https://tender.liamatux.com)
+- **CI**: `.github/workflows/ci.yml` — on every push/PR: Python syntax check (`py_compile`), then builds the Docker image
+- **CD**: `.github/workflows/deploy.yml` — on every push to `main`: SSH into the server, `git pull`, `docker compose up -d --build`. Fully automatic, no manual deploy steps
+- **Image**: multi-stage Dockerfile (build stage installs deps, final stage copies only the app + installed packages) — cut image size from 259MB to 203MB
+- **Healthcheck**: Docker healthcheck pings the app every 30s; combined with `restart: unless-stopped`, the container self-heals on crash (tested live — verified it actually restarts, not just configured)
 
-GitHub (main) → GitHub Actions (CI + CD)
-↓ SSH
-Hetzner Server
-│
-┌──────────────┼──────────────┐
-nginx-proxy portflix-app tender-app
-(SSL, routing) (this project)
-└───────── edge network ───────┘
+- **nginx-proxy** — separate project, terminates SSL with a Cloudflare Origin Certificate (wildcard for `*.liamatux.com`), routes by domain to the right container by service name
+- **Public URL**: [tender.liamatux.com](https://tender.liamatux.com)
+- **CI**: `.github/workflows/ci.yml` — on every push/PR: Python syntax check (`py_compile`), then builds the Docker image
+- **CD**: `.github/workflows/deploy.yml` — on every push to `main`: SSH into the server, `git pull`, `docker compose up -d --build`. Fully automatic, no manual deploy steps
+- **Image**: multi-stage Dockerfile (build stage installs deps, final stage copies only the app + installed packages) — cut image size from 259MB to 203MB
+- **Healthcheck**: Docker healthcheck pings the app every 30s; combined with `restart: unless-stopped`, the container self-heals on crash (tested live — verified it actually restarts, not just configured)
 
+## Monitoring
+
+A separate `monitoring` project on the same server (also on the `edge` network) runs:
+- **Prometheus** — scrapes metrics from itself, `node-exporter` (host CPU/RAM/disk), and `cadvisor` (per-container metrics)
+- **Grafana** — [grafana.liamatux.com](https://grafana.liamatux.com), dashboards for host resources and per-container CPU/memory/network, including a custom panel built from scratch with PromQL
+
+## Infrastructure as Code
+
+- **Terraform**: current server described as code and imported (`terraform import`) — config not yet committed to a repo, since the server is planned to be replaced soon with a new VPS
+- **Ansible**: playbook written to provision a fresh server from scratch (Docker install, firewall rules, `edge` network, project folders) — not yet run against a live target, pending the new VPS
 
 ## Project structure
 - `tender_app.py` — main application
-- `Dockerfile` / `docker-compose.yml` — containerization
+- `Dockerfile` / `docker-compose.yml` — containerization (multi-stage build)
 - `requirements.txt` — Python dependencies
 - `.github/workflows/` — CI and CD pipelines
+
+## Still on the roadmap
+- Kubernetes (k3s) — planned on a separate dedicated server, pending access
+- `git rebase -i` practice on a batch of small commits
